@@ -23,12 +23,6 @@ class CNC:
         self.numOfJobs = 0
         self.joblist = []
 
-   # def assignNumCode(self, code1):
-    #    self.num_code = code1
-    #def assignShapeCode(self,code2):
-     #   self.shape_code = code2
-    #def assignTypeCode(self,code3):
-     #   self.type_code = code3
     def __repr__(self):
         return repr(self.size,self.cnc_num,self.cnc_shape,self.reservedTime,self.numOfJobs,self.joblist)
     def setSize(self,size):

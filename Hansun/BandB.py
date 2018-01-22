@@ -6,7 +6,7 @@ from math import exp
 import sys
 
 
-trial = 500
+trial = 100000
 
 class Good:
     def __init__(self):
@@ -183,7 +183,7 @@ def makeSumTo1(a):
 def makeProbability(a):
     temp = copy.deepcopy(a)
     sum_ = 0
-    mean = float(sum(a,0.0))/float(len(a))
+    mean = float(sum(a,0.0)+1)/float(len(a))
     for i in range(len(temp)):
         temp[i] = float(1 / 1 + exp( (-6.0*temp[i]) / mean) )
         sum_ += temp[i]
@@ -191,6 +191,18 @@ def makeProbability(a):
     for i in range(len(temp)):
         li.append(float(temp[i]/float(sum_)))
     return li
+"""
+def makeProbability(a):
+    temp = copy.deepcopy(a)
+    sum = 0
+    for i in range(len(temp)):
+        temp[i] = float(1/temp[i])
+        sum += temp[i]
+    li = []
+    for i in range(len(temp)):
+        li.append(float(temp[i]/float(sum)))
+    return li
+"""
 workbook = xlrd.open_workbook("hansun2.xlsx")
 worksheet = workbook.sheet_by_index(0)
 rows = worksheet.nrows
@@ -199,6 +211,7 @@ numOf2JAW = 0
 numOf3JAW = 0
 
 cncs= []
+empty_cncs = []
 for i in range(rows):
     try:
         E = worksheet.cell_value(i,4)[0]
@@ -218,14 +231,12 @@ for i in range(rows):
         else:
             pass
     except:
-       #print(i)
+        #print(i)
         pass
 
-        #temp.setSizeFrom()
-
-#cncs = sorted(cncs,key =lambda c:int(c.cnc_shape),reverse=True) # for P3,JAW2
-#for i in range(40):
-    #cnc[i].printCode()
+        #cncs = sorted(cncs,key =lambda c:int(c.cnc_shape),reverse=True) # for P3,JAW2
+        #for i in range(40):
+        #cnc[i].printCode()
 
 interval_time = 3600 #다음작업까지 걸리는시간
 
@@ -243,7 +254,7 @@ from TWorkreport_Han_Eng en
 	inner join(
 	select c.workno, c.processcd, AVG(c.Cycletime) as Cycletime
 		from TWorkreport_Han_Eng e, TWorkReport_CNC c
-		where c.workno = e.workno and e.Workdate between '20171201' and '20171205' and (processcd ='P1' or processcd = 'P2' or processcd = 'P3')
+		where c.workno = e.workno and e.Workdate between '20171201' and '20171210' and (processcd ='P1' or processcd = 'P2' or processcd = 'P3')
 		group by c.workno, c.processcd
 	) j on en.workno = j.workno
 	order by workno
@@ -294,9 +305,12 @@ sorted_jobs = [] # deliverydate -> required_time sorted
 for job in deliverydate_sorted_jobs:
     sorted_jobs.append(sorted(job,key = lambda j:j.required_time,reverse=True))
 
+empty_cncs = copy.deepcopy(cncs)
+deadline_max_time_list = []
 for jobs in sorted_jobs:
+    date_idx = 0
     for job in jobs:
-       # job.printJob()
+        # job.printJob()
         for cnc in cncs:
             if(float(cnc.getSizeFrom())<= float(job.getSpec()) <= float(cnc.getSizeTo())):
                 if(job.getProcessCd() != 'P3' and job.getRequiredTime() <= 30000 and float(job.getSpec())<50):
@@ -327,33 +341,43 @@ for jobs in sorted_jobs:
                         break
                     else:
                         pass
+    max_temp = 0
+    for cnc2 in cncs:
+        if(cnc2.getReservedTime() > max_temp):
+            max_temp = cnc2.getReservedTime()
+    deadline_max_time_list.append(max_temp)
+    date_idx +=1
 print("=====================================================================================")
 #cncs = sorted(cncs,key= lambda j:j.cnc_num)
-#cnt =0
+cnt =0
 d_time_max = 0 # 가장 오래걸리는 cnc가 끝나기까지 걸리는 시간
 for cnc in cncs:
     #cnc.printJobList()
-    #cnt+=cnc.getNumOfJobs()
+    cnt+=cnc.getNumOfJobs()
     if(cnc.getReservedTime() > d_time_max):
         d_time_max = cnc.getReservedTime()
 
 
 
-temp_list = copy.deepcopy(cncs)
+temp_list = copy.deepcopy(empty_cncs)
 
 picked = 0
 current_req_time = 0
-final_required_time = 999999999
-
+final_required_time = d_time_max
 
 brk= False
 cut = False
-for __ in range(trial):
-    if(__%100==0):
-        print(float(__/trial*100))
-    temp_cncs = copy.deepcopy(temp_list)
-
-    for jobs_ in deliverydate_sorted_jobs:
+print(d_time_max)
+print(cnt)
+post_cncs = copy.deepcopy(temp_list)
+max_time_list = []
+date_idx = 0
+for jobs_ in deliverydate_sorted_jobs:
+    print(float(date_idx/float(len(deliverydate_sorted_jobs))* 100.0) )
+    max_time_list.append(999999999)
+    pre_cncs = copy.deepcopy(post_cncs)
+    for _ in range(trial):
+        temp_cncs = copy.deepcopy(pre_cncs)
         for job in jobs_:
             if(job.getRequiredTime()>30000 or float(job.getSpec()>50)):
                 continue
@@ -365,61 +389,73 @@ for __ in range(trial):
                 if (float(cnc.getSizeFrom()) <= float(job.getSpec()) <= float(cnc.getSizeTo())):
                     if(job.getProcessCd()=='P3'):
                         if(cnc.getShape()=='2JAW'):
-                            if(cnc.getNumOfJobs()==0):
-                                cnc.jobAssign(job)
-                                cnc.setReservedTime(job.getRequiredTime())
-                                cnc.increaseNumOfJobs()
-                                brk = True
-                                break
                             possible_cncs.append(cnc)
                             cnc_idx.append(idx)
                     else:
-                        if (cnc.getNumOfJobs() == 0):
-                            cnc.jobAssign(job)
-                            cnc.setReservedTime(job.getRequiredTime())
-                            cnc.increaseNumOfJobs()
-                            brk = True
-                            break
                         possible_cncs.append(cnc)
                         cnc_idx.append(idx)
                 else:
                     idx+=1
                     continue
                 idx+=1
-            if(brk == True):
-                brk = False
-                continue
             reserved_time_list = []
             for cnc in possible_cncs:
                 reserved_time_list.append(cnc.getReservedTime())
             possible_cncs_prob = makeProbability(reserved_time_list)
             picked = np.random.choice(len(possible_cncs_prob),1,p=copy.deepcopy(possible_cncs_prob))
-            if(temp_cncs[cnc_idx[picked[0]]].getReservedTime() + job.getRequiredTime() + interval_time > d_time_max):
+            if(temp_cncs[cnc_idx[picked[0]]].getReservedTime() + job.getRequiredTime() + interval_time > max_time_list[date_idx]):
                 cut=True
                 break
+            if(temp_cncs[cnc_idx[picked[0]]].getNumOfJobs()==0):
+                temp_cncs[cnc_idx[picked[0]]].setReservedTime(temp_cncs[cnc_idx[picked[0]]].getReservedTime() + job.getRequiredTime())
+            else:
+                temp_cncs[cnc_idx[picked[0]]].setReservedTime(temp_cncs[cnc_idx[picked[0]]].getReservedTime() + job.getRequiredTime() + interval_time)
             temp_cncs[cnc_idx[picked[0]]].jobAssign(job)
-            temp_cncs[cnc_idx[picked[0]]].setReservedTime(temp_cncs[cnc_idx[picked[0]]].getReservedTime() + job.getRequiredTime() + interval_time)
             temp_cncs[cnc_idx[picked[0]]].increaseNumOfJobs()
-        if(cut==True):
-            break
-    if(cut==True):
-        cut=False
-        continue
-    time_max =0
-    for cnc in temp_cncs:
-        if (cnc.getReservedTime() > time_max):
-            time_max = cnc.getReservedTime()
-    if(time_max < final_required_time):
-        final_required_time = time_max
-        cncs = copy.deepcopy(temp_cncs)
-sum_jobs = 0
-for cnc in cncs:
-    cnc.printJobList()
-    sum_jobs += cnc.getNumOfJobs()
+        if(cut == False):
+            temp_max = 0
+            for cnc2 in temp_cncs:
+                if(cnc2.getReservedTime() > temp_max):
+                    temp_max = cnc2.getReservedTime()
+            max_time_list[date_idx] = temp_max
+            post_cncs = copy.deepcopy(temp_cncs)
+        else:
+            cut= False
+    date_idx += 1
+time_max =0
 
+print(max_time_list)
+print(deadline_max_time_list)
+sampled_cncs = copy.deepcopy(post_cncs)
+for cnc in sampled_cncs:
+    if (cnc.getReservedTime() > time_max):
+        time_max = cnc.getReservedTime()
+final_required_time = time_max
+sum_jobs = 0
+
+###################################################################################
+sum_sampled_jobs = 0
+for cnc in cncs:
+    #cnc.printJobList()
+    sum_jobs += cnc.getNumOfJobs()
+for cnc in sampled_cncs:
+    sum_sampled_jobs += cnc.getNumOfJobs()
+    cnc.printJobList()
 print("=====================================================================================")
 
 #cncs = sorted(cncs,key= lambda j:j.cnc_num)
+time_h = int(d_time_max/3600)
+temp = int(d_time_max%3600)
+time_m = int(temp/60)
+temp = int(temp%60)
+time_s = int(temp)
+
+print("========================================================")
+print(d_time_max)
+print("작업개수:",end="")
+print(sum_jobs)
+print("총 소요시간:",time_h,"시간 ",time_m,"분 ",time_s,"초")
+print("작업간 간격:",interval_time,"초")
 
 time_h = int(final_required_time/3600)
 temp = int(final_required_time%3600)
@@ -430,8 +466,10 @@ time_s = int(temp)
 print("========================================================")
 print(final_required_time)
 print("작업개수:",end="")
-print(len(rows))
+print(sum_sampled_jobs)
 print("총 소요시간:",time_h,"시간 ",time_m,"분 ",time_s,"초")
 print("작업간 간격:",interval_time,"초")
 
 print(sum_jobs)
+print(date_idx)
+
