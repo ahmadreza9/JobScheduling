@@ -1,10 +1,12 @@
 import xlrd
 import pyodbc
 import copy
-import random
-trial = 1000
-max_time =0
-interval_time = 3600 #다음작업까지 걸리는시간
+import  numpy as np
+from math import exp
+import sys
+
+minimum_time =99999
+forCutting = 0 # prevent infinite loop
 class CNC:
     def __init__(self):
         self.size = []
@@ -161,10 +163,26 @@ class Job:
         print(self.getSpec(),end=" ")
         print(self.getRequiredTime())
 
+def makeSumTo1(a):
+    sum =0
+    for i in range(len(a)):
+        sum += a[i]
+    a[(np.random.choice(len(a),1))[0]] += (1-sum)
+    return a
 
+def makeProbability(a):
+    temp = copy.deepcopy(a)
+    sum_ = 0
+    mean = float(sum(a,0.0)+1)/float(len(a))
+    for i in range(len(temp)):
+        temp[i] = float(1 / 1 + exp( (-6.0*temp[i]) / mean) )
+        sum_ += temp[i]
+    li = []
+    for i in range(len(temp)):
+        li.append(float(temp[i]/float(sum_)))
+    return li
 def checkJob(cnc,job):
     if(job.getProcessCd!='P3'):
-        #print(cnc.getSizeFrom(),job.getSpec(),cnc.getSizeTo())
         if(float(cnc.getSizeFrom()) <= float(job.getSpec()) <= float(cnc.getSizeTo())):
             return True
     else:
@@ -172,37 +190,41 @@ def checkJob(cnc,job):
             if(float(cnc.getSizeFrom()) <= float(job.getSpec()) <= float(cnc.getSizeTo())):
                 return True
     return False
-def swappingJobs(asc, desc, deliverydate):
-    global max_time
-
+def swappingJobs(asc, desc, date):
+    global minimum_time
     difference = desc.getReservedTime() - asc.getReservedTime()
-    temp_min = 0
-
-    min = desc.getReservedTime()
+    min = 99999999
     idx_a = -1
     idx_d = -1
-   # print(asc.printJobList())
-    #print(desc.printJobList())
+    print(asc.printJobList())
+    print(desc.printJobList())
     for a in reversed(list(range(len(asc.joblist)))):
         for d in reversed(list(range(len(desc.joblist)))):
-            #print(asc.joblist[a].getWorkNo()," ", desc.joblist[d].getWorkNo())
-            if(desc.joblist[d].getRequiredTime() > asc.joblist[a].getRequiredTime()):
-                if((desc.joblist[d].getDeliveryDate() == deliverydate) and (asc.joblist[a].getDeliveryDate() == deliverydate)):
-                    if( asc.getReservedTime() - asc.joblist[a].getRequiredTime() + desc.joblist[d].getRequiredTime() < min ):
-                        if(checkJob(asc,desc.joblist[d]) == True and checkJob(desc,asc.joblist[a]) == True):
-                            if( (desc.getReservedTime() - asc.getReservedTime()) > (desc.joblist[d].getRequiredTime() - asc.joblist[a].getRequiredTime()) *2 ):
-                                min = desc.getReservedTime() - (desc.joblist[d].getRequiredTime() - asc.joblist[a].getRequiredTime())
-                            else:
-                                min = asc.getReservedTime() + (desc.joblist[d].getRequiredTime() - asc.joblist[a].getRequiredTime())
+            print(asc.joblist[a].getWorkNo()," ", desc.joblist[d].getWorkNo())
+            if(desc.joblist[d].getDeliveryDate() == date and asc.joblist[a].getDeliveryDate() == date):
+                if( abs(desc.joblist[d].getRequiredTime() - asc.joblist[a].getRequiredTime() - (difference/2)) < min ):
+                    if(checkJob(asc,desc.joblist[d]) == True and checkJob(desc,asc.joblist[a]) == True):
+                        min = abs(desc.joblist[d].getRequiredTime() - asc.joblist[a].getRequiredTime() - (difference/2))
+                        if(minimum_time <min):
+                            minimum_time = min
                             idx_a = a
                             idx_d = d
+                        else:
+                            pass
 
-    if(idx_a >=0):
+                    else:
+                        print("not cnc, job match")
+                else:
+                    print("Not min")
+            else:
+                print(asc.joblist[a].getDeliveryDate(),desc.joblist[d].getDeliveryDate(),"date mismatch")
 
-        max_time = desc.getReservedTime() - desc.joblist[idx_d].getRequiredTime() + asc.joblist[idx_a].getRequiredTime()
-     #   asc.joblist[idx_a].printJob()
-      #  desc.joblist[idx_d].printJob()
-       # print("SWAP COMPLETEDSWAP COMPLETEDSWAP COMPLETEDSWAP COMPLETEDSWAP COMPLETEDSWAP COMPLETEDSWAP COMPLETED")
+    if(idx_a >= 0):
+        asc.joblist[idx_a].printJob()
+        desc.joblist[idx_d].printJob()
+        asc.printJobList()
+        desc.printJobList()
+        print("SWAP COMPLETEDSWAP COMPLETEDSWAP COMPLETEDSWAP COMPLETEDSWAP COMPLETEDSWAP COMPLETEDSWAP COMPLETED")
         minimum_time = asc.joblist[idx_a].getRequiredTime()+desc.joblist[idx_d].getRequiredTime()
         asc.joblist.append(desc.joblist[idx_d])
         asc.setReservedTime(asc.getReservedTime()-asc.joblist[idx_a].getRequiredTime()+desc.joblist[idx_d].getRequiredTime())
@@ -210,11 +232,9 @@ def swappingJobs(asc, desc, deliverydate):
         desc.setReservedTime(desc.getReservedTime()-desc.joblist[idx_d].getRequiredTime()+asc.joblist[idx_a].getRequiredTime())
         asc.joblist.pop(idx_a)
         desc.joblist.pop(idx_d)
-        #asc.printJobList()
-        #desc.printJobList()
         return True
     else:
-        #print("XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX")
+        print("XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX")
         return False
 """
 def makeProbability(a):
@@ -259,8 +279,14 @@ for i in range(rows):
         #print(i)
         pass
 
+        #cncs = sorted(cncs,key =lambda c:int(c.cnc_shape),reverse=True) # for P3,JAW2
+        #for i in range(40):
+        #cnc[i].printCode()
+
+interval_time = 3600 #다음작업까지 걸리는시간
 numOfCNC = numOf2JAW + numOf3JAW
-###################################################################################
+
+1105324800
 jobs = []
 worksheet = workbook.sheet_by_index(1)
 rows = worksheet.nrows
@@ -280,47 +306,7 @@ for i in range(rows):
     except:
         continue
     jobs.append(temp)
-###############################################################################################
 
-"""#################################################################### DB DATA #########################################################
-conn = pyodbc.connect(driver ='{SQL Server}', host = '221.161.62.124,2433', database = '',user = 'Han_Eng_Back',pwd = 'HseAdmin1991')
-cursor = conn.cursor()
-cursor.execute(
-    
-   select j.workno, j.processcd, j.Cycletime, en.Workdate, en.deliverydate, en. orderqty,en.goodcd, REPLACE(REPLACE(REPLACE(REPLACE(g.Spec,'HEX.',''),'HEX',''),'-IP',''),'-DIN','') as Spec, Cast(j.Cycletime as float)*Cast(en.orderqty as float) as required_time
-from TWorkreport_Han_Eng en 
-	inner join TGood g on en.Raw_Materialcd = g.GoodCd
-	and en.PmsYn = 'N'
-	and en.ContractYn = '1'
-	and g.Class2 not in ('060002', '060006')
-	and g.Class3 in ('061038', '061039')
-	inner join(
-	select c.workno, c.processcd, AVG(c.Cycletime) as Cycletime
-		from TWorkreport_Han_Eng e, TWorkReport_CNC c
-		where c.workno = e.workno and e.Workdate between '20171201' and '20171230' and (processcd ='P1' or processcd = 'P2' or processcd = 'P3')
-		group by c.workno, c.processcd
-	) j on en.workno = j.workno
-	order by workno
-    
-)
-jobs = []
-rows = cursor.fetchall()
-for row in rows:
-    temp = Job()
-    temp.setWorkNo(row.workno)
-    temp.setProcessCd(row.processcd)
-    temp.setCT(row.Cycletime)
-    temp.setWorkDate(row.Workdate)
-    temp.setDeliveryDate(row.deliverydate)
-    temp.setOrderQty(row.orderqty)
-    temp.setGoodCd(row.goodcd)
-    try:
-        temp.setSpec(float(row.Spec))
-    except:
-        continue
-    jobs.append(temp)
-
-"""##################################################################
 jobs = sorted(jobs,key = lambda j:int(j.deliverydate))
 deliverydate_sorted_jobs = []
 deliverydate_required_time = []
@@ -356,101 +342,97 @@ cncs_desc = []
 date = ""
 
 brk_zero = False
-current_time = 99999999
-for i in range(trial):
-    cncs = copy.deepcopy(empty_cncs)
-    for jobs in sorted_jobs:
-        random.shuffle(jobs)
-        date_idx = 0
-        date = jobs[0].getDeliveryDate()
-        for job in jobs:
-            # job.printJob()
-            for cnc in cncs:
-                if(float(cnc.getSizeFrom())<= float(job.getSpec()) <= float(cnc.getSizeTo())):
-                    if(job.getProcessCd() != 'P3' and job.getRequiredTime() <= 30000 and float(job.getSpec())<50):
-                        if(cnc.getNumOfJobs()!= 0):
-                            cnc.setReservedTime(cnc.getReservedTime()+job.getRequiredTime()+ interval_time)
+for jobs in sorted_jobs:
+    date_idx = 0
+    date = jobs[0].getDeliveryDate()
+    for job in jobs:
+        # job.printJob()
+        for cnc in cncs:
+            if(float(cnc.getSizeFrom())<= float(job.getSpec()) <= float(cnc.getSizeTo())):
+                if(job.getProcessCd() != 'P3' and job.getRequiredTime() <= 30000 and float(job.getSpec())<50):
+                    if(cnc.getNumOfJobs()!= 0):
+                        cnc.setReservedTime(cnc.getReservedTime()+job.getRequiredTime()+ interval_time)
+                    else:
+                        brk_zero = True
+                        cnc.setReservedTime(cnc.getReservedTime() + job.getRequiredTime())
+                    cnc.jobAssign(job)
+                    cnc.increaseNumOfJobs()
+                    cncs = sorted(cncs,key=lambda j:int(j.reservedTime))
+
+                    break
+                else:
+                    if(cnc.getShape()=='2JAW' and job.getRequiredTime() <= 30000 and float(job.getSpec())<50):
+                        if (cnc.getNumOfJobs() != 0):
+                            cnc.setReservedTime(cnc.getReservedTime() + job.getRequiredTime() + interval_time)
                         else:
+                            brk_zero = True
                             cnc.setReservedTime(cnc.getReservedTime() + job.getRequiredTime())
                         cnc.jobAssign(job)
                         cnc.increaseNumOfJobs()
-                        cncs = sorted(cncs,key=lambda j:int(j.reservedTime))
-
+                        cncs = sorted(cncs, key=lambda j: int(j.reservedTime))
                         break
                     else:
-                        if(cnc.getShape()=='2JAW' and job.getRequiredTime() <= 30000 and float(job.getSpec())<50):
-                            if (cnc.getNumOfJobs() != 0):
-                                cnc.setReservedTime(cnc.getReservedTime() + job.getRequiredTime() + interval_time)
-                            else:
-                                cnc.setReservedTime(cnc.getReservedTime() + job.getRequiredTime())
-                            cnc.jobAssign(job)
-                            cnc.increaseNumOfJobs()
-                            cncs = sorted(cncs, key=lambda j: int(j.reservedTime))
-                            break
-                        else:
-                            pass
+                        pass
 
-        ############################################################
-        cncs_asc = sorted(cncs, key = lambda c:c.reservedTime)
-        cncs_desc = sorted(cncs, key = lambda c:c.reservedTime,reverse=True)
-        #print("============================================================================")
-        #print(len(cncs_desc))
-        max_time = 0
-        #print("@@@@@@@@@@@@@@@@@@@first@@@@@@@@@@@@@@@@")
-        for c in cncs:
-            #c.printJobList()
-            if(max_time < c.getReservedTime()):
-                max_time = c.getReservedTime()
-        #print("@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@")
-        asc_idx = 0
-        desc_idx =0
-        brk = False
-        while(asc_idx < len(cncs_asc)-1):
-            #print("SWAPPING STARTSWAPPING STARTSWAPPING STARTSWAPPING STARTSWAPPING STARTSWAPPING STARTSWAPPING STARTSWAPPING STARTSWAPPING STARTSWAPPING STARTSWAPPING STARTSWAPPING STARTSWAPPING STARTSWAPPING STARTSWAPPING STARTSWAPPING START")
-            brk = swappingJobs(cncs_asc[asc_idx],cncs_desc[desc_idx],date)
-            if(brk == True):
-                cncs_asc = sorted(cncs, key = lambda c:c.reservedTime)
-                cncs_desc = sorted(cncs, key = lambda c:c.reservedTime,reverse=True)
-                asc_idx = 0
-                desc_idx =0
-                #print("@@@@@@@@@@@@CHANGE@@@@@@@@@@@@@")
-                #for asc in cncs_asc:
-                    #asc.printJobList()
-                #print("@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@")
-            else:
+    ############################################################
+    cncs_asc = sorted(cncs, key = lambda c:c.reservedTime)
+    cncs_desc = sorted(cncs, key = lambda c:c.reservedTime,reverse=True)
+    for c in cncs:
+        c.printJobList()
+    asc_idx = -1
+    desc_idx =-2
+    cncs_asc = sorted(cncs, key = lambda c:c.reservedTime)
+    cncs_desc = sorted(cncs, key = lambda c:c.reservedTime,reverse=True)
+    asc_idx = 0
+    desc_idx =0
+    brk = False
+    while(brk_zero == False and desc_idx < len(cncs_desc)/2):
+        print("SWAPPING STARTSWAPPING STARTSWAPPING STARTSWAPPING STARTSWAPPING STARTSWAPPING STARTSWAPPING STARTSWAPPING STARTSWAPPING STARTSWAPPING STARTSWAPPING STARTSWAPPING STARTSWAPPING STARTSWAPPING STARTSWAPPING STARTSWAPPING START")
+        brk = swappingJobs(cncs_asc[asc_idx],cncs_desc[desc_idx],date)
+        if(brk == True):
+            cncs_asc = sorted(cncs, key = lambda c:c.reservedTime)
+            cncs_desc = sorted(cncs, key = lambda c:c.reservedTime,reverse=True)
+            asc_idx = 0
+            desc_idx =0
+        else:
+            if(asc_idx <=desc_idx):
                 asc_idx+=1
-        #print("******************************************************************************************************")
-        brk_zero = False
-        cncs = copy.deepcopy(cncs_asc)
-        max_temp = 0
-        for cnc2 in cncs:
-            if(cnc2.getReservedTime() > max_temp):
-                max_temp = cnc2.getReservedTime()
-        deadline_max_time_list.append(max_temp)
-        date_idx +=1
-    d_time_max = 0
-    for cnc in cncs:
-        if(cnc.getReservedTime() > d_time_max):
-         d_time_max = cnc.getReservedTime()
-    if(d_time_max < current_time):
-        min_cncs = copy.deepcopy(cncs)
-        current_time = d_time_max
-    print(i+1)
+            else:
+                desc_idx +=1
+    brk_zero = False
+    cncs = copy.deepcopy(cncs_asc)
 
+
+    max_temp = 0
+    for cnc2 in cncs:
+        if(cnc2.getReservedTime() > max_temp):
+            max_temp = cnc2.getReservedTime()
+    deadline_max_time_list.append(max_temp)
+    date_idx +=1
+print("=====================================================================================")
+#cncs = sorted(cncs,key= lambda j:j.cnc_num)
 cnt =0
-for cnc in min_cncs:
+d_time_max = 0 # 가장 오래걸리는 cnc가 끝나기까지 걸리는 시간
+for cnc in cncs:
     cnc.printJobList()
     #print(cnc.getNumOfJobs())
     cnt+=cnc.getNumOfJobs()
+    if(cnc.getReservedTime() > d_time_max):
+        d_time_max = cnc.getReservedTime()
+
+
+
+
+
 #cncs = sorted(cncs,key= lambda j:j.cnc_num)
-time_h = int(current_time/3600)
-temp = int(current_time%3600)
+time_h = int(d_time_max/3600)
+temp = int(d_time_max%3600)
 time_m = int(temp/60)
 temp = int(temp%60)
 time_s = int(temp)
 
 print("========================================================")
-print(current_time)
+print(d_time_max)
 print("작업개수:",end="")
 print(cnt)
 print("총 소요시간:",time_h,"시간 ",time_m,"분 ",time_s,"초")

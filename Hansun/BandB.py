@@ -5,17 +5,7 @@ import  numpy as np
 from math import exp
 import sys
 
-
-trial = 100000
-
-class Good:
-    def __init__(self):
-        self.goodcd = 0
-        self.cycletime = 0
-    def setGoodcd(self,goodcd):
-        self.goodcd = goodcd
-    def getGoodcd(self):
-        return self.goodcd
+trial = 5000
 
 class CNC:
     def __init__(self):
@@ -254,7 +244,7 @@ from TWorkreport_Han_Eng en
 	inner join(
 	select c.workno, c.processcd, AVG(c.Cycletime) as Cycletime
 		from TWorkreport_Han_Eng e, TWorkReport_CNC c
-		where c.workno = e.workno and e.Workdate between '20171201' and '20171210' and (processcd ='P1' or processcd = 'P2' or processcd = 'P3')
+		where c.workno = e.workno and e.Workdate between '20171201' and '20171230' and (processcd ='P1' or processcd = 'P2' or processcd = 'P3')
 		group by c.workno, c.processcd
 	) j on en.workno = j.workno
 	order by workno
@@ -373,10 +363,10 @@ post_cncs = copy.deepcopy(temp_list)
 max_time_list = []
 date_idx = 0
 for jobs_ in deliverydate_sorted_jobs:
-    print(float(date_idx/float(len(deliverydate_sorted_jobs))* 100.0) )
     max_time_list.append(999999999)
     pre_cncs = copy.deepcopy(post_cncs)
     for _ in range(trial):
+        print(date_idx+1,"/",len(deadline_max_time_list),",",float(_/trial*100))
         temp_cncs = copy.deepcopy(pre_cncs)
         for job in jobs_:
             if(job.getRequiredTime()>30000 or float(job.getSpec()>50)):
@@ -435,12 +425,16 @@ sum_jobs = 0
 
 ###################################################################################
 sum_sampled_jobs = 0
+print("=============================deadline job list============================")
 for cnc in cncs:
     #cnc.printJobList()
     sum_jobs += cnc.getNumOfJobs()
+    cnc.printJobList()
+    print(cnc.getNumOfJobs())
+print("=================================sampled job list=================================")
 for cnc in sampled_cncs:
     sum_sampled_jobs += cnc.getNumOfJobs()
-    cnc.printJobList()
+
 print("=====================================================================================")
 
 #cncs = sorted(cncs,key= lambda j:j.cnc_num)
